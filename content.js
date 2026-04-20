@@ -130,23 +130,16 @@ if (isSensitiveSite) {
       const adElements = document.querySelectorAll(adSelectors.join(', '));
       let count = 0;
 
-      function replaceAds() {
-        chrome.storage.local.get({ enabled: true }, (result) => {
-          if (!result.enabled) return;
+      adElements.forEach(el => {
+        if (!isLikelyAd(el)) return;
 
-          const adElements = document.querySelectorAll(adSelectors.join(', '));
-          let count = 0;
+        // Store original clone before replacement
+        const clone = el.cloneNode(true);
+        originalNodes.set(el, clone);
 
-          adElements.forEach(el => {
-            if (!isLikelyAd(el)) return;
+        const randomFact = facts[Math.floor(Math.random() * facts.length)];
 
-            // Store original clone before replacement
-            const clone = el.cloneNode(true);
-            originalNodes.set(el, clone);
-
-            const randomFact = facts[Math.floor(Math.random() * facts.length)];
-
-            el.innerHTML = `
+        el.innerHTML = `
           <div class="edu-box" 
                style="border: 1px solid #e0e0e0; padding: 20px; background-color: #ffffff; cursor: pointer; border-radius: 12px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: left; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: all 0.2s ease; position: relative; overflow: hidden; margin: 10px 0;"
                onmouseover="this.style.transform='scale(1.02)'; this.style.backgroundColor='#fafafa'; this.style.boxShadow='0 6px 12px rgba(0,0,0,0.15)';"
@@ -161,113 +154,114 @@ if (isSensitiveSite) {
             </div>
           </div>
         `;
-            el.setAttribute('data-edu-replaced', 'true');
-            count++;
+        el.setAttribute('data-edu-replaced', 'true');
+        count++;
 
-            // Update persistent counter
-            chrome.storage.local.get({ adsReplaced: 0 }, (data) => {
-              chrome.storage.local.set({ adsReplaced: data.adsReplaced + 1 });
-            });
-
-            if (DEBUG) console.log("Edu Ad Replacer: Replaced ad element");
-          });
-
-          if (count > 0 && DEBUG) {
-            console.log(`Edu Ad Replacer: Batch update - Replaced ${count} elements.`);
-          }
+        // Update persistent counter
+        chrome.storage.local.get({ adsReplaced: 0 }, (data) => {
+          chrome.storage.local.set({ adsReplaced: data.adsReplaced + 1 });
         });
+
+        if (DEBUG) console.log("Edu Ad Replacer: Replaced ad element");
+      });
+
+      if (count > 0 && DEBUG) {
+        console.log(`Edu Ad Replacer: Batch update - Replaced ${count} elements.`);
       }
+    });
+  }
 
-      // --- RESTORATION LOGIC ---
-      const MAX_PATTERNS = 50;
+  // --- RESTORATION LOGIC ---
+  const MAX_PATTERNS = 50;
 
-      function handleRestore(notAdBtn) {
-        const container = notAdBtn.closest("[data-edu-replaced='true']");
-        if (!container) return;
+  function handleRestore(notAdBtn) {
+    const container = notAdBtn.closest("[data-edu-replaced='true']");
+    if (!container) return;
 
-        const originalNode = originalNodes.get(container);
-        if (!originalNode) return;
+    const originalNode = originalNodes.get(container);
+    if (!originalNode) return;
 
-        // Visual feedback: Fade out
-        container.style.transition = "opacity 0.15s ease";
-        container.style.opacity = "0.5";
+    // Visual feedback: Fade out
+    container.style.transition = "opacity 0.15s ease";
+    container.style.opacity = "0.5";
 
-        setTimeout(() => {
-          const parent = container.parentNode;
-          if (parent) {
-            // Mark as ignored to prevent re-processing
-            originalNode.setAttribute('data-user-ignored', 'true');
-            ignoredElements.add(originalNode);
+    setTimeout(() => {
+      const parent = container.parentNode;
+      if (parent) {
+        // Mark as ignored to prevent re-processing
+        originalNode.setAttribute('data-user-ignored', 'true');
+        ignoredElements.add(originalNode);
 
-            // Perform the swap
-            parent.replaceChild(originalNode, container);
+        // Perform the swap
+        parent.replaceChild(originalNode, container);
 
-            // Learn the pattern (Fuzzy memory)
-            const newPattern = {
-              className: originalNode.className.toString(),
-              id: originalNode.id.toString()
-            };
+        // Learn the pattern (Fuzzy memory)
+        const newPattern = {
+          className: originalNode.className.toString(),
+          id: originalNode.id.toString()
+        };
 
-            chrome.storage.local.get({ ignorePatterns: [], falsePositives: 0 }, (data) => {
-              let patterns = data.ignorePatterns;
+        chrome.storage.local.get({ ignorePatterns: [], falsePositives: 0 }, (data) => {
+          let patterns = data.ignorePatterns;
 
-              if (newPattern.className || newPattern.id) {
-                patterns.push(newPattern);
-                if (patterns.length > MAX_PATTERNS) patterns.shift();
-                activeIgnorePatterns = patterns; // update local cache
-              }
-
-              chrome.storage.local.set({
-                ignorePatterns: patterns,
-                falsePositives: data.falsePositives + 1
-              });
-            });
-
-            if (DEBUG) console.log("Edu Ad Replacer: Element restored and pattern learned.");
+          if (newPattern.className || newPattern.id) {
+            patterns.push(newPattern);
+            if (patterns.length > MAX_PATTERNS) patterns.shift();
+            activeIgnorePatterns = patterns; // update local cache
           }
-        }, 150);
-      }
 
-      // Initial run
-      replaceAds();
-
-      // Debounced Observation logic
-      let observerTimeout;
-      const observer = new MutationObserver(() => {
-        clearTimeout(observerTimeout);
-        observerTimeout = setTimeout(() => {
-          replaceAds();
-        }, 100);
-      });
-
-      observer.observe(document.body, {
-        childList: true,
-        subtree: true
-      });
-
-      // Click handling (Delegated)
-      document.addEventListener("click", (event) => {
-        // 1. Handle restoration button
-        const notAdBtn = event.target.closest(".not-ad-btn");
-        if (notAdBtn) {
-          event.preventDefault();
-          event.stopPropagation();
-          handleRestore(notAdBtn);
-          return;
-        }
-
-        // 2. Handle main educational box click
-        const eduBox = event.target.closest(".edu-box");
-        if (eduBox) {
-          if (DEBUG) console.log("Edu box clicked");
-          chrome.runtime.sendMessage({
-            action: "EDU_CLICK",
-            timestamp: Date.now()
+          chrome.storage.local.set({
+            ignorePatterns: patterns,
+            falsePositives: data.falsePositives + 1
           });
-        }
-      }, true); // Use capture phase to intercept before site listeners if needed
+        });
 
-      console.log("Content script loaded and monitoring for ads...");
+        if (DEBUG) console.log("Edu Ad Replacer: Element restored and pattern learned.");
+      }
+    }, 150);
+  }
+
+  // Initial run
+  replaceAds();
+
+  // Debounced Observation logic
+  let observerTimeout;
+  const observer = new MutationObserver(() => {
+    clearTimeout(observerTimeout);
+    observerTimeout = setTimeout(() => {
+      replaceAds();
+    }, 100);
+  });
+
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true
+  });
+
+  // Click handling (Delegated)
+  document.addEventListener("click", (event) => {
+    // 1. Handle restoration button
+    const notAdBtn = event.target.closest(".not-ad-btn");
+    if (notAdBtn) {
+      event.preventDefault();
+      event.stopPropagation();
+      handleRestore(notAdBtn);
+      return;
     }
+
+    // 2. Handle main educational box click
+    const eduBox = event.target.closest(".edu-box");
+    if (eduBox) {
+      if (DEBUG) console.log("Edu box clicked");
+      chrome.runtime.sendMessage({
+        action: "EDU_CLICK",
+        timestamp: Date.now()
+      });
+    }
+  }, true); // Use capture phase to intercept before site listeners if needed
+
+  console.log("Content script loaded and monitoring for ads...");
+}
+
 
 //comment for git commit
