@@ -42,6 +42,98 @@ function isPatternIgnored(element) {
   });
 }
 
+// --- PRO IFRAME DETECTION & DISPLACEMENT ---
+function isAdIframe(iframe) {
+  const src = iframe.src || "";
+  return /googlesyndication|doubleclick|ads/i.test(src.toLowerCase());
+}
+
+function scoreContainer(el) {
+  if (!el || el.nodeType !== 1) return 0;
+  const r = el.getBoundingClientRect();
+  let s = 0;
+
+  // 1. Size matching common ad banners
+  if (r.width >= 120 && r.height >= 100) s += 2;
+  
+  // Sidebar standard widths (~160/300/336)
+  const standardWidths = [160, 300, 336];
+  if (standardWidths.some(w => Math.abs(r.width - w) < 20)) s += 2;
+
+  // 2. CSS Positioning hints
+  const style = window.getComputedStyle(el);
+  if (style.position === "fixed" || style.position === "sticky") s += 2;
+
+  // 3. Naming hints (Id/Class)
+  const name = (el.className + " " + el.id).toLowerCase();
+  if (/\b(ad|ads|banner|sponsor|promo)\b/i.test(name)) s += 2;
+
+  return s;
+}
+
+function isSafeToReplace(el) {
+  if (!el || el.nodeType !== 1) return false;
+  
+  // 1. Tag name blacklist
+  const blacklistTags = new Set(["BODY", "MAIN", "SECTION", "HEADER", "NAV", "ASIDE", "HTML"]);
+  if (blacklistTags.has(el.tagName)) return false;
+
+  const r = el.getBoundingClientRect();
+
+  // 2. Big Content Protection: Skip giant containers (likely the main article area)
+  if (r.width > window.innerWidth * 0.8 && r.height > window.innerHeight * 0.6) {
+    if (DEBUG) console.log("Edu Ad Replacer: Safety - skipped giant container", el);
+    return false;
+  }
+
+  // 3. Context check: Skip important regions and common grid containers
+  if (el.closest("main, header, nav, footer, aside")) return false;
+  if (el.closest("[role='main'], [role='feed'], .container, .content, #main-content")) return false;
+
+  return true;
+}
+
+function findBestContainer(iframe) {
+  let depth = 0;
+  let current = iframe;
+  let candidates = [];
+
+  while (current.parentElement && depth < 5) {
+    current = current.parentElement;
+    if (isSafeToReplace(current)) {
+      const score = scoreContainer(current);
+      if (score >= 2) {
+        candidates.push({ el: current, score: score });
+      }
+    }
+    depth++;
+  }
+
+  if (candidates.length === 0) return iframe;
+
+  // Pick highest score
+  candidates.sort((a, b) => b.score - a.score);
+  return candidates[0].el;
+}
+
+function buildEduBoxHTML(fact) {
+  return `
+    <div class="edu-box" 
+         style="border: 1px solid #e0e0e0; padding: 20px; background-color: #ffffff; cursor: pointer; border-radius: 12px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: left; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: all 0.2s ease; position: relative; overflow: hidden; margin: 10px 0;"
+         onmouseover="this.style.transform='scale(1.02)'; this.style.backgroundColor='#fafafa'; this.style.boxShadow='0 6px 12px rgba(0,0,0,0.15)';"
+         onmouseout="this.style.transform='scale(1)'; this.style.backgroundColor='#ffffff'; this.style.boxShadow='0 4px 6px rgba(0,0,0,0.1)';"
+    >
+      <div style="font-size: 9px; color: #bbb; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.8px; font-weight: bold;">Ad replaced by Edu Extension (Demo)</div>
+      <h3 style="margin: 0 0 10px 0; color: #2c3e50; font-size: 16px; font-weight: 700;">💡 Quick Fact</h3>
+      <p style="margin: 0; color: #555; line-height: 1.5; font-size: 14px;">${fact}</p>
+      <div style="font-size: 11px; color: #999; margin-top: 15px; font-style: italic; border-top: 1px solid #f0f0f0; padding-top: 10px; display: flex; justify-content: space-between; align-items: center;">
+        <span>Click to support learning (demo)</span>
+        <button class="not-ad-btn" style="font-size: 10px; color: #888; text-decoration: underline; background: none; border: none; cursor: pointer; padding: 0; font-family: inherit;">Not an Ad?</button>
+      </div>
+    </div>
+  `;
+}
+
 // --- AD DETECTION HEURISTICS ---
 function isLikelyAd(element) {
   // 1. Hard Rejections
@@ -57,13 +149,10 @@ function isLikelyAd(element) {
 
   if (element.closest('header, nav, footer')) return false;
 
-  // High-Confidence Iframe Check (Direct match, skip scoring)
-  if (element.tagName === "IFRAME") {
-    const src = element.src.toLowerCase();
-    if (src.includes("ads") || src.includes("doubleclick") || src.includes("googlesyndication")) {
-      if (DEBUG) console.log("Edu Ad Replacer: High-confidence iframe ad detected.", element);
-      return true;
-    }
+  // High-Confidence Iframe Check
+  if (element.tagName === "IFRAME" && isAdIframe(element)) {
+    if (DEBUG) console.log("Edu Ad Replacer: High-confidence iframe ad detected.", element);
+    return true;
   }
 
   const style = window.getComputedStyle(element);
@@ -155,45 +244,21 @@ if (isSensitiveSite) {
 
         let target = el;
 
-        // Parent Displacement Logic for Iframes
-        if (el.tagName === "IFRAME") {
-          const parent = el.parentElement;
-          if (parent && 
-              parent.tagName !== "BODY" && 
-              parent.tagName !== "HTML" && 
-              parent.offsetWidth > 100 && 
-              parent.offsetHeight > 50) {
-            
-            // Check if parent was already replaced
-            if (parent.getAttribute('data-edu-replaced') === 'true') return;
-            target = parent;
-          } else {
-            // If parent is not a good candidate, check iframe size itself
-            if (el.offsetWidth <= 100 || el.offsetHeight <= 50) return;
-          }
+        // Pro Displacement Logic for Iframes
+        if (el.tagName === "IFRAME" && isAdIframe(el)) {
+          target = findBestContainer(el);
+          if (target.getAttribute('data-edu-replaced') === 'true') return;
         }
+
+        // Final safety check for target
+        if (target !== el && !isSafeToReplace(target)) return;
 
         // Store original clone before replacement
         const clone = target.cloneNode(true);
         originalNodes.set(target, clone);
 
         const randomFact = facts[Math.floor(Math.random() * facts.length)];
-
-        target.innerHTML = `
-          <div class="edu-box" 
-               style="border: 1px solid #e0e0e0; padding: 20px; background-color: #ffffff; cursor: pointer; border-radius: 12px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: left; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: all 0.2s ease; position: relative; overflow: hidden; margin: 10px 0;"
-               onmouseover="this.style.transform='scale(1.02)'; this.style.backgroundColor='#fafafa'; this.style.boxShadow='0 6px 12px rgba(0,0,0,0.15)';"
-               onmouseout="this.style.transform='scale(1)'; this.style.backgroundColor='#ffffff'; this.style.boxShadow='0 4px 6px rgba(0,0,0,0.1)';"
-          >
-            <div style="font-size: 9px; color: #bbb; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.8px; font-weight: bold;">Ad replaced by Edu Extension (Demo)</div>
-            <h3 style="margin: 0 0 10px 0; color: #2c3e50; font-size: 16px; font-weight: 700;">💡 Quick Fact</h3>
-            <p style="margin: 0; color: #555; line-height: 1.5; font-size: 14px;">${randomFact}</p>
-            <div style="font-size: 11px; color: #999; margin-top: 15px; font-style: italic; border-top: 1px solid #f0f0f0; padding-top: 10px; display: flex; justify-content: space-between; align-items: center;">
-              <span>Click to support learning (demo)</span>
-              <button class="not-ad-btn" style="font-size: 10px; color: #888; text-decoration: underline; background: none; border: none; cursor: pointer; padding: 0; font-family: inherit;">Not an Ad?</button>
-            </div>
-          </div>
-        `;
+        target.innerHTML = buildEduBoxHTML(randomFact);
         target.setAttribute('data-edu-replaced', 'true');
         count++;
 
