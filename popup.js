@@ -2,6 +2,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const statusBadge = document.getElementById('statusBadge');
   const toggleBtn = document.getElementById('toggleBtn');
   const adsCount = document.getElementById('adsCount');
+  const fpCount = document.getElementById('fpCount');
   const resetBtn = document.getElementById('resetBtn');
 
   // Load current state (Enabled/Disabled)
@@ -11,8 +12,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Load replacement stats
   const updateStats = () => {
-    chrome.storage.local.get({ adsReplaced: 0 }, (result) => {
+    chrome.storage.local.get({ adsReplaced: 0, falsePositives: 0 }, (result) => {
       adsCount.textContent = result.adsReplaced;
+      fpCount.textContent = result.falsePositives;
     });
   };
   updateStats();
@@ -29,7 +31,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Reset stats handle
   resetBtn.addEventListener('click', () => {
-    chrome.storage.local.set({ adsReplaced: 0 }, () => {
+    chrome.storage.local.set({ 
+      adsReplaced: 0, 
+      falsePositives: 0,
+      ignorePatterns: [] 
+    }, () => {
       updateStats();
     });
   });

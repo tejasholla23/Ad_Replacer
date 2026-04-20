@@ -22,10 +22,39 @@ const facts = [
 
 const DEBUG = true; // Use true to see scoring logs, false for production
 
+// --- SESSION MEMORY & HEURISTICS ---
+const ignoredElements = new WeakSet();
+const originalNodes = new WeakMap();
+let activeIgnorePatterns = [];
+
+// Fetch global ignore patterns from storage
+chrome.storage.local.get({ ignorePatterns: [] }, (data) => {
+  activeIgnorePatterns = data.ignorePatterns;
+});
+
+function isPatternIgnored(element) {
+  const classNames = element.className.toString().toLowerCase();
+  const idValue = element.id.toString().toLowerCase();
+  
+  return activeIgnorePatterns.some(pattern => {
+    return (pattern.className && classNames.includes(pattern.className.toLowerCase())) ||
+           (pattern.id && idValue.includes(pattern.id.toLowerCase()));
+  });
+}
+
 // --- AD DETECTION HEURISTICS ---
 function isLikelyAd(element) {
   // 1. Hard Rejections
   if (element.getAttribute('data-edu-replaced') === 'true') return false;
+  if (element.getAttribute('data-user-ignored') === 'true') return false;
+  if (ignoredElements.has(element)) return false;
+  
+  // Fuzzy pattern matching (skip elements similar to ones the user restored)
+  if (isPatternIgnored(element)) {
+    if (DEBUG) console.log("Edu Ad Replacer: Element skipped due to learned ignore pattern.", element);
+    return false;
+  }
+
   if (element.closest('header, nav, footer')) return false;
 
   const style = window.getComputedStyle(element);
@@ -101,8 +130,19 @@ if (isSensitiveSite) {
       const adElements = document.querySelectorAll(adSelectors.join(', '));
       let count = 0;
 
+  function replaceAds() {
+    chrome.storage.local.get({ enabled: true }, (result) => {
+      if (!result.enabled) return;
+
+      const adElements = document.querySelectorAll(adSelectors.join(', '));
+      let count = 0;
+
       adElements.forEach(el => {
         if (!isLikelyAd(el)) return;
+
+        // Store original clone before replacement
+        const clone = el.cloneNode(true);
+        originalNodes.set(el, clone);
 
         const randomFact = facts[Math.floor(Math.random() * facts.length)];
 
@@ -115,7 +155,10 @@ if (isSensitiveSite) {
             <div style="font-size: 9px; color: #bbb; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.8px; font-weight: bold;">Ad replaced by Edu Extension (Demo)</div>
             <h3 style="margin: 0 0 10px 0; color: #2c3e50; font-size: 16px; font-weight: 700;">💡 Quick Fact</h3>
             <p style="margin: 0; color: #555; line-height: 1.5; font-size: 14px;">${randomFact}</p>
-            <div style="font-size: 11px; color: #999; margin-top: 15px; font-style: italic; border-top: 1px solid #f0f0f0; padding-top: 10px;">Click to support learning (demo)</div>
+            <div style="font-size: 11px; color: #999; margin-top: 15px; font-style: italic; border-top: 1px solid #f0f0f0; padding-top: 10px; display: flex; justify-content: space-between; align-items: center;">
+              <span>Click to support learning (demo)</span>
+              <button class="not-ad-btn" style="font-size: 10px; color: #888; text-decoration: underline; background: none; border: none; cursor: pointer; padding: 0; font-family: inherit;">Not an Ad?</button>
+            </div>
           </div>
         `;
         el.setAttribute('data-edu-replaced', 'true');
@@ -135,12 +178,66 @@ if (isSensitiveSite) {
     });
   }
 
+  // --- RESTORATION LOGIC ---
+  const MAX_PATTERNS = 50;
+
+  function handleRestore(notAdBtn) {
+    const container = notAdBtn.closest("[data-edu-replaced='true']");
+    if (!container) return;
+
+    const originalNode = originalNodes.get(container);
+    if (!originalNode) return;
+
+    // Visual feedback: Fade out
+    container.style.transition = "opacity 0.15s ease";
+    container.style.opacity = "0.5";
+
+    setTimeout(() => {
+      const parent = container.parentNode;
+      if (parent) {
+        // Mark as ignored to prevent re-processing
+        originalNode.setAttribute('data-user-ignored', 'true');
+        ignoredElements.add(originalNode);
+        
+        // Perform the swap
+        parent.replaceChild(originalNode, container);
+
+        // Learn the pattern (Fuzzy memory)
+        const newPattern = {
+          className: originalNode.className.toString(),
+          id: originalNode.id.toString()
+        };
+
+        chrome.storage.local.get({ ignorePatterns: [], falsePositives: 0 }, (data) => {
+          let patterns = data.ignorePatterns;
+          
+          if (newPattern.className || newPattern.id) {
+            patterns.push(newPattern);
+            if (patterns.length > MAX_PATTERNS) patterns.shift();
+            activeIgnorePatterns = patterns; // update local cache
+          }
+
+          chrome.storage.local.set({ 
+            ignorePatterns: patterns,
+            falsePositives: data.falsePositives + 1
+          });
+        });
+
+        if (DEBUG) console.log("Edu Ad Replacer: Element restored and pattern learned.");
+      }
+    }, 150);
+  }
+
   // Initial run
   replaceAds();
 
-  // Observe for changes
+  // Debounced Observation logic
+  let observerTimeout;
   const observer = new MutationObserver(() => {
-    replaceAds();
+    clearTimeout(observerTimeout);
+    observerTimeout = setTimeout(() => {
+      replaceAds();
+    }, 100);
   });
 
   observer.observe(document.body, {
@@ -148,17 +245,27 @@ if (isSensitiveSite) {
     subtree: true
   });
 
-  // Click handling
+  // Click handling (Delegated)
   document.addEventListener("click", (event) => {
+    // 1. Handle restoration button
+    const notAdBtn = event.target.closest(".not-ad-btn");
+    if (notAdBtn) {
+      event.preventDefault();
+      event.stopPropagation();
+      handleRestore(notAdBtn);
+      return;
+    }
+
+    // 2. Handle main educational box click
     const eduBox = event.target.closest(".edu-box");
     if (eduBox) {
-      console.log("Edu box clicked");
+      if (DEBUG) console.log("Edu box clicked");
       chrome.runtime.sendMessage({
         action: "EDU_CLICK",
         timestamp: Date.now()
       });
     }
-  });
+  }, true); // Use capture phase to intercept before site listeners if needed
 
   console.log("Content script loaded and monitoring for ads...");
 }
