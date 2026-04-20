@@ -41,6 +41,27 @@
       box-sizing: border-box;
       box-shadow: 0 8px 32px rgba(31, 38, 135, 0.1);
       border: 1px solid rgba(255, 255, 255, 0.2);
+      margin-bottom: 12px;
+    }
+    .stat-card {
+      background: rgba(255, 255, 255, 0.6);
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 15px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+    }
+    .stat-label {
+      font-size: 13px;
+      color: #7f8c8d;
+      font-weight: 500;
+    }
+    .stat-value {
+      font-size: 18px;
+      color: #2c3e50;
+      font-weight: 700;
     }
     .status-badge {
       display: inline-block;
@@ -72,17 +93,27 @@
       cursor: pointer;
       transition: all 0.2s ease;
       width: 100%;
+      margin-bottom: 10px;
     }
     .toggle-btn:hover {
       background: #34495e;
       transform: translateY(-2px);
       box-shadow: 0 4px 12px rgba(0,0,0,0.1);
     }
-    .toggle-btn:active {
-      transform: translateY(0);
+    .reset-link {
+      font-size: 11px;
+      color: #95a5a6;
+      text-decoration: underline;
+      cursor: pointer;
+      background: none;
+      border: none;
+      padding: 5px;
+    }
+    .reset-link:hover {
+      color: #7f8c8d;
     }
     .footer {
-      margin-top: 15px;
+      margin-top: 5px;
       font-size: 11px;
       color: #7f8c8d;
     }
@@ -95,9 +126,14 @@
     </div>
     <div class="card">
       <div id="statusBadge" class="status-badge status-on">Status: ON</div>
+      <div class="stat-card">
+        <span class="stat-label">Ads Replaced</span>
+        <span id="adsCount" class="stat-value">0</span>
+      </div>
       <button id="toggleBtn" class="toggle-btn">Disable Extension</button>
-      <div class="footer">Toggle the extension on/off for all sites.</div>
+      <button id="resetBtn" class="reset-link">Reset Counter</button>
     </div>
+    <div class="footer">Tracking knowledge impact since 2026.</div>
   </div>
   <script src="popup.js"></script>
 </body>

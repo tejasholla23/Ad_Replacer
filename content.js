@@ -120,6 +120,12 @@ if (isSensitiveSite) {
         `;
         el.setAttribute('data-edu-replaced', 'true');
         count++;
+
+        // Update persistent counter
+        chrome.storage.local.get({ adsReplaced: 0 }, (data) => {
+          chrome.storage.local.set({ adsReplaced: data.adsReplaced + 1 });
+        });
+
         if (DEBUG) console.log("Edu Ad Replacer: Replaced ad element");
       });
 

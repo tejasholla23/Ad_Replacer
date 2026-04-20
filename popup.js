@@ -1,11 +1,21 @@
 document.addEventListener('DOMContentLoaded', () => {
   const statusBadge = document.getElementById('statusBadge');
   const toggleBtn = document.getElementById('toggleBtn');
+  const adsCount = document.getElementById('adsCount');
+  const resetBtn = document.getElementById('resetBtn');
 
-  // Load current state
+  // Load current state (Enabled/Disabled)
   chrome.storage.local.get({ enabled: true }, (result) => {
     updateUI(result.enabled);
   });
+
+  // Load replacement stats
+  const updateStats = () => {
+    chrome.storage.local.get({ adsReplaced: 0 }, (result) => {
+      adsCount.textContent = result.adsReplaced;
+    });
+  };
+  updateStats();
 
   // Toggle state handle
   toggleBtn.addEventListener('click', () => {
@@ -13,10 +23,14 @@ document.addEventListener('DOMContentLoaded', () => {
       const newState = !result.enabled;
       chrome.storage.local.set({ enabled: newState }, () => {
         updateUI(newState);
-        
-        // Optional: Notify the user that they might need to reload or just wait for the next ad check
-        console.log(`Extension ${newState ? 'enabled' : 'disabled'}`);
       });
+    });
+  });
+
+  // Reset stats handle
+  resetBtn.addEventListener('click', () => {
+    chrome.storage.local.set({ adsReplaced: 0 }, () => {
+      updateStats();
     });
   });
 
