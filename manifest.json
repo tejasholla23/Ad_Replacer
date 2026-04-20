@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Edu Ad Replacer",
+  "version": "1.0",
+  "description": "A simple extension to replace ads with educational content.",
+  "permissions": ["scripting", "storage", "activeTab"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ]
+}
