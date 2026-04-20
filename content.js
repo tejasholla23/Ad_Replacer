@@ -132,8 +132,19 @@ const isSensitiveSite = sensitiveKeywords.some(keyword => currentUrl.includes(ke
 if (isSensitiveSite) {
   if (DEBUG) console.log("Edu Ad Replacer: Extension disabled on sensitive site.");
 } else {
+  function isContextValid() {
+    if (!chrome.runtime?.id) {
+      if (observer) observer.disconnect();
+      return false;
+    }
+    return true;
+  }
+
   function replaceAds() {
+    if (!isContextValid()) return;
+
     chrome.storage.local.get({ enabled: true }, (result) => {
+      if (!isContextValid()) return;
       if (!result.enabled) return;
 
       const adElements = document.querySelectorAll(adSelectors.join(', '));
@@ -188,6 +199,7 @@ if (isSensitiveSite) {
 
         // Update persistent counter
         chrome.storage.local.get({ adsReplaced: 0 }, (data) => {
+          if (!isContextValid()) return;
           chrome.storage.local.set({ adsReplaced: data.adsReplaced + 1 });
         });
 
@@ -230,7 +242,10 @@ if (isSensitiveSite) {
           id: originalNode.id.toString()
         };
 
+        if (!isContextValid()) return;
+
         chrome.storage.local.get({ ignorePatterns: [], falsePositives: 0 }, (data) => {
+          if (!isContextValid()) return;
           let patterns = data.ignorePatterns;
 
           if (newPattern.className || newPattern.id) {
@@ -256,6 +271,7 @@ if (isSensitiveSite) {
   // Debounced Observation logic
   let observerTimeout;
   const observer = new MutationObserver(() => {
+    if (!isContextValid()) return;
     clearTimeout(observerTimeout);
     observerTimeout = setTimeout(() => {
       replaceAds();
@@ -269,6 +285,8 @@ if (isSensitiveSite) {
 
   // Click handling (Delegated)
   document.addEventListener("click", (event) => {
+    if (!isContextValid()) return;
+
     // 1. Handle restoration button
     const notAdBtn = event.target.closest(".not-ad-btn");
     if (notAdBtn) {
