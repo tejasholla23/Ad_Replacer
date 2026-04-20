@@ -1,4 +1,4 @@
-# Edu Ad Replacer 🎓🚫
+# Edu Ad Replacer 🚫
 
 **Edu Ad Replacer** is a sophisticated Chrome Extension (Manifest V3) that transforms the web experience by intelligently replacing intrusive advertisements with interesting educational facts. 
 
