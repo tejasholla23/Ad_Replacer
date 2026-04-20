@@ -34,7 +34,7 @@ function replaceAds() {
 // Initial run
 replaceAds();
 
-// Optional: Observe for changes to handle dynamically loaded ads (simple version)
+// Observe for changes to handle dynamically loaded ads
 const observer = new MutationObserver(() => {
   replaceAds();
 });
@@ -42,6 +42,22 @@ const observer = new MutationObserver(() => {
 observer.observe(document.body, {
   childList: true,
   subtree: true
+});
+
+// Click handling for educational boxes
+document.addEventListener("click", (event) => {
+  // Check if the clicked element or its parent is the edu-box
+  const eduBox = event.target.closest(".edu-box");
+  
+  if (eduBox) {
+    console.log("Edu box clicked");
+    
+    // Send message to background script
+    chrome.runtime.sendMessage({
+      action: "EDU_CLICK",
+      timestamp: Date.now()
+    });
+  }
 });
 
 console.log("Content script loaded and monitoring for ads...");
