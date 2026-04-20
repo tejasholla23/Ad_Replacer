@@ -11,7 +11,7 @@ Instead of just blocking ads, it turns wasted attention into a learning opportun
 - **Pro Iframe Traversal**: Specifically engineered to catch stubborn sidebar and deeply nested Google AdSense banners by traversing the DOM and identifying the most "meaningful" container for replacement.
 - **Fuzzy Pattern Matching**: Automatically ignores elements that match the signatures of previously reverted false positives.
 
-### 🧩 Learning Mode & Correction
+### 🧩 Adaptive Feedback System
 - **"Not an Ad?" Interaction**: Every replaced block features a subtle restoration button.
 - **High-Fidelity Restoration**: Uses `cloneNode(true)` and `WeakMap` lifecycle management to perfectly restore the original site element if the user marks it as a false positive.
 - **Persistent Memory**: Reverted patterns are saved to `chrome.storage.local` to improve the extension's accuracy over time.
@@ -46,6 +46,12 @@ Instead of just blocking ads, it turns wasted attention into a learning opportun
 
 - **Scoring Logic**: You can view the heuristic score for any element by setting `const DEBUG = true;` in `content.js`.
 - **Custom Facts**: You can expand the educational database by adding strings to the `facts` array in `content.js`.
+
+## ⚠️ Limitations
+
+- Ads rendered inside **shadow DOM** or highly sandboxed environments may not be fully accessible.
+- Some advanced anti-adblock implementations may bypass detection.
+- This extension is designed for educational purposes and not intended for real ad monetization replacement.
 
 ---
 
