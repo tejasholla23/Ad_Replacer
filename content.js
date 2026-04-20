@@ -57,6 +57,15 @@ function isLikelyAd(element) {
 
   if (element.closest('header, nav, footer')) return false;
 
+  // High-Confidence Iframe Check (Direct match, skip scoring)
+  if (element.tagName === "IFRAME") {
+    const src = element.src.toLowerCase();
+    if (src.includes("ads") || src.includes("doubleclick") || src.includes("googlesyndication")) {
+      if (DEBUG) console.log("Edu Ad Replacer: High-confidence iframe ad detected.", element);
+      return true;
+    }
+  }
+
   const style = window.getComputedStyle(element);
   if (style.display === "none" || style.visibility === "hidden") return false;
 
@@ -133,13 +142,33 @@ if (isSensitiveSite) {
       adElements.forEach(el => {
         if (!isLikelyAd(el)) return;
 
+        let target = el;
+
+        // Parent Displacement Logic for Iframes
+        if (el.tagName === "IFRAME") {
+          const parent = el.parentElement;
+          if (parent && 
+              parent.tagName !== "BODY" && 
+              parent.tagName !== "HTML" && 
+              parent.offsetWidth > 100 && 
+              parent.offsetHeight > 50) {
+            
+            // Check if parent was already replaced
+            if (parent.getAttribute('data-edu-replaced') === 'true') return;
+            target = parent;
+          } else {
+            // If parent is not a good candidate, check iframe size itself
+            if (el.offsetWidth <= 100 || el.offsetHeight <= 50) return;
+          }
+        }
+
         // Store original clone before replacement
-        const clone = el.cloneNode(true);
-        originalNodes.set(el, clone);
+        const clone = target.cloneNode(true);
+        originalNodes.set(target, clone);
 
         const randomFact = facts[Math.floor(Math.random() * facts.length)];
 
-        el.innerHTML = `
+        target.innerHTML = `
           <div class="edu-box" 
                style="border: 1px solid #e0e0e0; padding: 20px; background-color: #ffffff; cursor: pointer; border-radius: 12px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: left; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: all 0.2s ease; position: relative; overflow: hidden; margin: 10px 0;"
                onmouseover="this.style.transform='scale(1.02)'; this.style.backgroundColor='#fafafa'; this.style.boxShadow='0 6px 12px rgba(0,0,0,0.15)';"
@@ -154,7 +183,7 @@ if (isSensitiveSite) {
             </div>
           </div>
         `;
-        el.setAttribute('data-edu-replaced', 'true');
+        target.setAttribute('data-edu-replaced', 'true');
         count++;
 
         // Update persistent counter
@@ -162,7 +191,7 @@ if (isSensitiveSite) {
           chrome.storage.local.set({ adsReplaced: data.adsReplaced + 1 });
         });
 
-        if (DEBUG) console.log("Edu Ad Replacer: Replaced ad element");
+        if (DEBUG) console.log("Edu Ad Replacer: Replaced element", target);
       });
 
       if (count > 0 && DEBUG) {
