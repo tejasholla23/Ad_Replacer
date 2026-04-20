@@ -19,7 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
   updateStats();
 
-  // Toggle state handle
+  // Toggle state handle.
   toggleBtn.addEventListener('click', () => {
     chrome.storage.local.get({ enabled: true }, (result) => {
       const newState = !result.enabled;
